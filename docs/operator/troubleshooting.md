@@ -214,14 +214,18 @@ migration is a separate procedure, outside the operator.
 
 `kubectl aicr describe <rollout>` shows the message and the step in flight.
 
-- **`InventoryDrift`.** Applications were deleted, created or recreated, or
-  moved to another plan, after the rollout was created and approved; the
-  message lists each change (`appeared`, `disappeared`, `was recreated`, `is
-  at plan …`). The check repeats, so undoing the change resumes the rollout.
-  Otherwise, a retry ends it `Superseded` and creates a new rollout from the
-  current state, which needs a fresh approval. A hand edit of an
-  Application's spec is not drift: the release's own step writes it back
-  (`FieldOwnershipOverridden`).
+- **`InventoryDrift`.** Applications were deleted, created or recreated,
+  moved to another plan, or edited after the rollout was created and
+  approved; the message lists each change (`appeared`, `disappeared`,
+  `was recreated`, `is at plan …`, `was edited`). An edit is a change to an
+  Application's source, Helm values or destination, whether the rollout has
+  not reached the release yet or already wrote it; its sync policy and
+  status are not compared. The check repeats, so undoing the change resumes
+  the rollout. Otherwise, a retry ends it `Superseded` and creates a new
+  rollout from the current state, which needs a fresh approval. A hand edit
+  of the release whose step is in flight is not written back: its step stays
+  `SpecDrifted` until the edit is undone or its action timeout fails the
+  rollout.
 - **`StepUnknown`.** A step names a release the target plan lacks. Retry.
 
 ## Rollout failed, expired or revoked
@@ -260,7 +264,9 @@ deployment validation:
 fail, after pushing their evidence, and 2 when it refuses the recipe or its
 readiness pre-flight. `status.validation` names the Job, the run and, when
 evidence was pushed, its reference. Read the Job in `aicr-validation`, fix
-the cause, and retry: a retry is a new rollout and a new run.
+the cause, and retry: a retry is a new rollout and a new run. Validation
+checks the components the bundle deploys: it runs against the recipe the
+bundle records, so a component an override turns off is not required.
 
 A validator image that is not pinned in `aicr.validatorImages` at the tag AICR
 names, or a pinned tag that resolves to another digest, also fails the run.

@@ -291,7 +291,8 @@ provenance:
 recipe:                             # absent on a Rebuilt plan
   name: h100-eks-ubuntu-training-kubeflow
   criteria: {service: eks, accelerator: h100, os: ubuntu, intent: training, platform: kubeflow}
-  configMapRef: {name: aicr-recipe-<digest prefix>, digest: sha256:<...>}
+  configMapRef: {configMap: aicr-recipe-<digest prefix>, digest: sha256:<...>}            # the recipe Job's output: upgrade-check and reproduce
+  validationConfigMapRef: {configMap: aicr-recipe-<digest prefix>, digest: sha256:<...>}  # the bundle's recipe: deployment validation
   warnings: []                      # bounded AICR bundle notes and warnings
 releases:                           # AICR normative order; DAG edges explicit
 - id: gpu-operator
@@ -328,7 +329,13 @@ Bounds: at most 128 releases, with release IDs of at most 53 characters (the
 Helm release-name limit), stored as plain JSON (no compression) so
 `kubectl get -o yaml` stays readable; a plan that does not fit one ConfigMap
 (1 MiB) is rejected. The recipe and values live in their own immutable
-ConfigMaps, so the plan stays small. Every chart is served from the runtime
+ConfigMaps, so the plan stays small. A plan keeps two recipes: the one AICR
+resolved, which `upgrade-check` compares and `kubectl aicr reproduce` renders
+from, and the one the bundle records after AICR applied the render flags,
+which deployment validation runs against, so a component an override turns
+off is not required. A plan written before it recorded `validationConfigMapRef`
+validates against `configMapRef`. Neither reference is part of the plan's
+digest. Every chart is served from the runtime
 registry and pinned by manifest digest; mirrored charts also record the verified
 upstream archive digest.
 
@@ -376,7 +383,8 @@ spec:                                 # immutable, except the set-once approval 
   toPlanDigest: sha256:<...>
   startingInventoryDigest: sha256:<...>
   startingInventory:                  # the owned engine objects the digest covers; drift is judged against them
-  - {releaseID: gpu-operator, name: gpu-operator, uid: <uid>, planDigest: sha256:<...>, revision: sha256:<...>}
+  - {releaseID: gpu-operator, name: gpu-operator, uid: <uid>, planDigest: sha256:<...>, revision: sha256:<...>, specDigest: sha256:<...>}
+                                      # specDigest fingerprints the Application's source, Helm values and destination
   assessmentRef: {configMap: aicr-upgrade-check-<run id>, digest: sha256:<...>}
   deadline: "2026-10-15T04:00:00Z"
   actionTimeout: 30m
@@ -416,7 +424,7 @@ status:
   current: {release: gpu-operator-readiness, operation: Verify, startedAt: <time>, attempts: 1}
                                       # timeoutFrom: <time> once a halt ended; the action timeout runs from it
   releases:                           # state: Pending | Progressing | Ready | Failed | Suspended (step in flight while halted) | Deleting | Removed | Unknown
-  - {id: cert-manager, state: Ready, revision: sha256:<...>}
+  - {id: cert-manager, state: Ready, revision: sha256:<...>, specDigest: sha256:<...>}   # specDigest: the spec this rollout wrote, from when it became ready
   - {id: nvsentinel, state: Removed}
   validation: {job: <name>, runID: <id>, result: Passed, evidence: oci://<ref>@sha256:<...>}
   message: ""
